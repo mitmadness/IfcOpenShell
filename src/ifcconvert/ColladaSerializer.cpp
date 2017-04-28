@@ -34,6 +34,8 @@
 #include <string>
 #include <cmath>
 
+using namespace IfcSchema;
+
 static void collada_id(std::string &s)
 {
     IfcUtil::sanitate_material_name(s);
@@ -66,12 +68,12 @@ void ColladaSerializer::ColladaExporter::ColladaGeometries::write(
     const std::vector<real_t>& uvs)
 {
 	openMesh(mesh_id);
-
+	
 	// The normals vector can be empty for example when the WELD_VERTICES setting is used.
 	// IfcOpenShell does not provide them with multiple face normals collapsed into a single vertex.
 	const bool has_normals = !normals.empty();
     const bool has_uvs = !uvs.empty();
-
+	
 	addFloatSource(mesh_id, COLLADASW::LibraryGeometries::POSITIONS_SOURCE_ID_SUFFIX, positions);
 	if (has_normals) {
 		addFloatSource(mesh_id, COLLADASW::LibraryGeometries::NORMALS_SOURCE_ID_SUFFIX, normals);
@@ -218,11 +220,48 @@ void ColladaSerializer::ColladaExporter::ColladaScene::add(
 	node.end();
 }
 
+void ColladaSerializer::ColladaExporter::ColladaScene::addParent(const IfcGeom::Element<real_t>& parent){
+	//we open the visual scene tag if it's not.
+	if (!scene_opened) {
+		openVisualScene(scene_id);
+		scene_opened = true;
+	}
+
+
+	const std::vector<real_t> matrix = parent.transformation().matrix().data();
+	
+	double matrix_array[4][4] = {
+		{ (double)matrix[0], (double)matrix[3], (double)matrix[6], (double)matrix[9] },
+		{ (double)matrix[1], (double)matrix[4], (double)matrix[7], (double)matrix[10] },
+		{ (double)matrix[2], (double)matrix[5], (double)matrix[8], (double)matrix[11] },
+		{ 0, 0, 0, 1 }
+	};
+
+	//adding the offset to the matrix
+	matrix_array[0][3] += serializer->settings().offset[0];
+	matrix_array[1][3] += serializer->settings().offset[1];
+	matrix_array[2][3] += serializer->settings().offset[2];
+	
+	
+	const std::string id = "representation-" + boost::lexical_cast<std::string>(parent.id());
+
+	current_node = new COLLADASW::Node(mSW);
+	current_node->setNodeId(id);
+	current_node->setNodeName(parent.name());
+	current_node->addMatrix(matrix_array);
+	current_node->setType(COLLADASW::Node::NODE);
+	current_node->start();
+}
+
+void ColladaSerializer::ColladaExporter::ColladaScene::closeParent(){
+	if (current_node != NULL) { current_node->end(); }
+}
+
 void ColladaSerializer::ColladaExporter::ColladaScene::write() {
 	if (scene_opened) {
 		closeVisualScene();
 		closeLibrary();
-
+		
 		COLLADASW::Scene scene (mSW, COLLADASW::URI ("#" + scene_id));
 		scene.add();		
 	}
@@ -301,33 +340,67 @@ void ColladaSerializer::ColladaExporter::startDocument(const std::string& unit_n
 
 void ColladaSerializer::ColladaExporter::write(const IfcGeom::TriangulationElement<real_t>* o)
 {
-    const IfcGeom::Representation::Triangulation<real_t>& mesh = o->geometry();
-    const std::string name = serializer->settings().get(SerializerSettings::USE_ELEMENT_GUIDS) ?
-           o->guid() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_NAMES) ? o->name() : o->unique_id());
-    const std::string representation_id = "representation-" + boost::lexical_cast<std::string>(o->geometry().id());
-
+	const IfcGeom::Representation::Triangulation<real_t>& mesh = o->geometry();
+	
+	std::string slabSuffix = "";
+	if (o->type() == "IfcSlab")
+	{
+		slabSuffix = differentiateSlabTypes(o);
+	}
+	
+	const std::string name = serializer->settings().get(SerializerSettings::USE_ELEMENT_GUIDS) ?
+		o->guid() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_NAMES) ?
+			o->name() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_TYPES) ? o->type() + slabSuffix : o->unique_id()));
+	const std::string representation_id = "representation-" + boost::lexical_cast<std::string>(o->geometry().id());
 	std::vector<std::string> material_references;
-    foreach(const IfcGeom::Material& material, mesh.materials()) {
+	foreach(const IfcGeom::Material& material, mesh.materials()) {
 		if (!materials.contains(material)) {
 			materials.add(material);
 		}
-        std::string material_name = (serializer->settings().get(SerializerSettings::USE_MATERIAL_NAMES)
-            ? material.original_name() : material.name());
-        collada_id(material_name);
-        material_references.push_back(material_name);
+		std::string material_name = (serializer->settings().get(SerializerSettings::USE_MATERIAL_NAMES)
+			? material.original_name() : material.name());
+		collada_id(material_name);
+		material_references.push_back(material_name);
 	}
 
-	deferreds.push_back(
-        DeferredObject(name, representation_id, o->type(), o->transformation().matrix().data(), mesh.verts(), mesh.normals(),
-            mesh.faces(), mesh.edges(), mesh.material_ids(), mesh.materials(), material_references, mesh.uvs())
-    );
+	DeferredObject defered = (serializer->settings().get(SerializerSettings::USE_ELEMENT_HIERARCHY) ?
+		DeferredObject(name, representation_id, o->type(), o->transformation().matrix().data(), mesh.verts(), mesh.normals(),
+			mesh.faces(), mesh.edges(), mesh.material_ids(), mesh.materials(), material_references, mesh.uvs(), *(o->storey())) : 
+		DeferredObject(name, representation_id, o->type(), o->transformation().matrix().data(), mesh.verts(), mesh.normals(),
+				mesh.faces(), mesh.edges(), mesh.material_ids(), mesh.materials(), material_references, mesh.uvs()));
+	deferreds.push_back(defered);
+}
+
+std::string ColladaSerializer::ColladaExporter::differentiateSlabTypes(const IfcGeom::TriangulationElement<real_t>* o) {
+	IfcSlab* slab = (IfcSlab*)o->product();
+	switch (slab->PredefinedType()){
+			case (IfcSlabTypeEnum::IfcSlabType_ROOF):
+				return "_Roof";
+				break;
+			case (IfcSlabTypeEnum::IfcSlabType_LANDING):
+				return "_Landing";
+				break;
+			case (IfcSlabTypeEnum::IfcSlabType_BASESLAB):
+				return "_BasesLab";
+				break;
+			default:
+				return "_Unknown";
+				break;
+		}
 }
 
 void ColladaSerializer::ColladaExporter::endDocument() {
 	// In fact due the XML based nature of Collada and its dependency on library nodes,
 	// only at this point all objects are written to the stream.
 	materials.write();
+	bool use_hierarchy = serializer->settings().get(SerializerSettings::USE_ELEMENT_HIERARCHY);
+	
 	std::set<std::string> geometries_written;
+
+	//if the setting USE_ELEMENT_HIERARCHY is in use, we sort the deferreds objects by their parents.
+	if (use_hierarchy) {
+		std::sort(deferreds.begin(), deferreds.end());
+	}
 	for (std::vector<DeferredObject>::const_iterator it = deferreds.begin(); it != deferreds.end(); ++it) {
 		if (geometries_written.find(it->representation_id) != geometries_written.end()) {
 			continue;
@@ -336,11 +409,35 @@ void ColladaSerializer::ColladaExporter::endDocument() {
 		geometries.write(it->representation_id, it->type, it->vertices, it->normals, it->faces, it->edges, it->material_ids, it->materials, it->uvs);
 	}
 	geometries.close();
-	for (std::vector<DeferredObject>::const_iterator it = deferreds.begin(); it != deferreds.end(); ++it) {
+
+	int parent_id = -1;
+	bool is_parent_tag_opened = false; 
+	for (std::vector<DeferredObject>::const_iterator it = deferreds.begin(); it != deferreds.end(); ++it){
 		const std::string object_name = it->unique_id;
+
+		// if the setting USE_ELEMENT_HIERARCHY is used
+		// And if "it" has not parent AND a parent node is opened, OR it has a parent AND another parent node is opened
+		if (use_hierarchy && ((it->parent == NULL && parent_id != -1) || (it->parent != NULL && parent_id != it->parent->id())))
+		{
+			//close the parent tag if one is already open.
+			if (is_parent_tag_opened){
+				scene.closeParent();
+			}
+
+			if (it->parent != NULL){
+				parent_id = it->parent->id();
+				scene.addParent(*it->parent);
+				is_parent_tag_opened = true;
+			}
+		}
+		
         /// @todo redundant information using ID as both ID and Name, maybe omit Name or allow specifying what would be used as the name
 		scene.add(object_name, object_name, it->representation_id, it->material_references, it->matrix);
 	}
+	//close the last parent tag.
+	if (is_parent_tag_opened) { 
+		scene.closeParent();
+	};
 	scene.write();
 	stream.endDocument();
 }
@@ -356,6 +453,7 @@ void ColladaSerializer::writeHeader() {
 void ColladaSerializer::write(const IfcGeom::TriangulationElement<real_t>* o) {
     exporter.write(o);
 }
+
 
 void ColladaSerializer::finalize() {
 	exporter.endDocument();

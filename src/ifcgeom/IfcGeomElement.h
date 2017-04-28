@@ -81,6 +81,7 @@ namespace IfcGeom {
 		std::string _unique_id;
 		Transformation<P> _transformation;
         IfcSchema::IfcProduct* product_;
+		const Element<P>* _storey;
 	public:
 		int id() const { return _id; }
 		int parent_id() const { return _parent_id; }
@@ -91,6 +92,8 @@ namespace IfcGeom {
 		const std::string& unique_id() const { return _unique_id; }
 		const Transformation<P>& transformation() const { return _transformation; }
         IfcSchema::IfcProduct* product() const { return product_; }
+		const Element<P>* storey() const { return _storey; }
+		void SetFloor(const Element<P>* floor) { _storey = floor; }
 
 		Element(const ElementSettings& settings, int id, int parent_id, const std::string& name, const std::string& type,
             const std::string& guid, const std::string& context, const gp_Trsf& trsf, IfcSchema::IfcProduct *product)
@@ -106,6 +109,7 @@ namespace IfcGeom {
 				oss << "-" << ctx;
 			}
 			_unique_id = oss.str();
+
 		}
 		virtual ~Element() {}
 	};
