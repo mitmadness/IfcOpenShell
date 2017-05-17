@@ -574,14 +574,17 @@ namespace IfcGeom {
             else if (current_serialization) { ret = current_serialization; }
             else if (current_shape_model) { ret = current_shape_model; }
 
-			// If we want to organize the element by floors we need to get the floor of the element 
+			// If we want to organize the element considering their hierarchy
 			if (settings.get(IteratorSettings::SEARCH_FLOOR))
 			{
+				// We are going to build a vector with the element parents.
+				// First, create the parent vector
+				std::vector<const IfcGeom::Element<P>*> parents;
+				
 				// if the element has a parent
 				if (ret->parent_id() != -1)
 				{
 					const IfcGeom::Element<P>* parent_object = NULL;
-
 					bool hasParent = true;
 
 					// get the parent 
@@ -591,19 +594,28 @@ namespace IfcGeom {
 						hasParent = false;
 					}
 
-					// We need to find an IfcBuildingStorey in the parent
-					while (parent_object != NULL && parent_object->type() != "IfcBuildingStorey" && hasParent)
+					// Add the previously found parent to the vector
+					if (hasParent) parents.insert(parents.begin(), parent_object);
+					
+					// We need to find all the parents
+					while (parent_object != NULL && hasParent)
 					{
+						// Find the next parent
 						try { parent_object = getObject(parent_object->parent_id()); }
 						catch (std::exception e)
 						{
+							std::cout << e.what();
 							hasParent = false;
 						}
 
-						hasParent = hasParent && parent_object->parent_id() != 1;
+						// Add the previously found parent to the vector
+						if (hasParent) parents.insert(parents.begin(), parent_object);
+
+						hasParent = hasParent && parent_object->parent_id() != -1;
 					}
 
-					if (hasParent) { ret->SetFloor(parent_object); }
+					// when done push the parent list in the Element object
+					ret->SetParents(parents);
 				}
 			}
 
@@ -618,18 +630,15 @@ namespace IfcGeom {
 		}
 
 		const Element<P>* getObject(int id) {
-
 			gp_Trsf trsf;
 			int parent_id = -1;
 			std::string instance_type, product_name, product_guid;
             IfcSchema::IfcProduct* ifc_product = 0;
-
 			try {
 				const IfcUtil::IfcBaseClass* ifc_entity = ifc_file->entityById(id);
 				instance_type = IfcSchema::Type::ToString(ifc_entity->type());
 				if ( ifc_entity->is(IfcSchema::Type::IfcProduct) ) {
 					ifc_product = (IfcSchema::IfcProduct*)ifc_entity;
-					
 					product_guid = ifc_product->GlobalId();
 					product_name = ifc_product->hasName() ? ifc_product->Name() : "";
 					
@@ -640,16 +649,14 @@ namespace IfcGeom {
 							parent_id = parent_object->entity->id();
 						}
 					} catch (...) {}
-					
 					try {
 						kernel.convert(ifc_product->ObjectPlacement(), trsf);
 					} catch (...) {}
 				}
 			} catch(...) {}
-
 			ElementSettings element_settings(settings, unit_magnitude, instance_type);
+
 			Element<P>* ifc_object = new Element<P>(element_settings, id, parent_id, product_name, instance_type, product_guid, "", trsf, ifc_product);
-			
 			return ifc_object;
 		}
 
