@@ -112,7 +112,7 @@ namespace IfcGeom {
 
 				if (storey1 != NULL && storey2 != NULL && storey1->hasElevation() && storey2->hasElevation())
 				{
-					return storey1->Elevation() < storey2->Elevation();
+					return  (storey1->Elevation() == storey2->Elevation()) ? element1.id() < element2.id() : storey1->Elevation() < storey2->Elevation();
 				}
 			}
 			return element1.id() < element2.id();
