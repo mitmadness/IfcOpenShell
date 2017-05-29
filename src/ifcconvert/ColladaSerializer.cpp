@@ -391,8 +391,7 @@ void ColladaSerializer::ColladaExporter::write(const IfcGeom::TriangulationEleme
 	const IfcGeom::Representation::Triangulation<real_t>& mesh = o->geometry();
 	
 	std::string suffix = "";
-	if (o->type() == "IfcCovering") { suffix = differentiateCoveringTypes(o); }
-	if (o->type() == "IfcSlab") { suffix = differentiateSlabTypes(o); }
+	suffix = GetSuffix(o);
 	
 	const std::string name = serializer->settings().get(SerializerSettings::USE_ELEMENT_GUIDS) ?
 		o->guid() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_NAMES) ?
@@ -417,6 +416,20 @@ void ColladaSerializer::ColladaExporter::write(const IfcGeom::TriangulationEleme
 	}
 
 	deferreds.push_back(deferred);
+}
+
+std::string ColladaSerializer::ColladaExporter::GetSuffix(const IfcGeom::TriangulationElement<real_t>* o)
+{
+	if (o->type() == "IfcSlab") { return differentiateSlabTypes(o); }
+	else if (o->type() == "IfcCovering") { return differentiateCoveringTypes(o); }
+	else if (o->type() == "IfcWallStandardCase")
+	{
+		IfcWallStandardCase* wall = (IfcWallStandardCase*)o->product();
+		
+		boost::shared_ptr<IfcTemplatedEntityList<Ifc2x3::IfcRelVoidsElement>> op = wall->HasOpenings();
+		if (wall->HasOpenings().get()->size() != 0) { return "_Opened"; }
+	}
+	return "";
 }
 
 std::string ColladaSerializer::ColladaExporter::differentiateSlabTypes(const IfcGeom::TriangulationElement<real_t>* o) {
