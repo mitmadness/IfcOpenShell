@@ -422,7 +422,7 @@ std::string ColladaSerializer::ColladaExporter::GetSuffix(const IfcGeom::Triangu
 {
 	if (o->type() == "IfcSlab") { return differentiateSlabTypes(o); }
 	else if (o->type() == "IfcCovering") { return differentiateCoveringTypes(o); }
-	else if (o->type() == "IfcWallStandardCase")
+	else if (o->type() == "IfcWallStandardCase" || o->type() == "IfcWall")
 	{
 		IfcWallStandardCase* wall = (IfcWallStandardCase*)o->product();
 		
