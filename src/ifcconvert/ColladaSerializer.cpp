@@ -390,15 +390,13 @@ void ColladaSerializer::ColladaExporter::write(const IfcGeom::TriangulationEleme
 {
 	const IfcGeom::Representation::Triangulation<real_t>& mesh = o->geometry();
 	
-	std::string slabSuffix = "";
-	if (o->type() == "IfcSlab")
-	{
-		slabSuffix = differentiateSlabTypes(o);
-	}
+	std::string suffix = "";
+	if (o->type() == "IfcCovering") { suffix = differentiateCoveringTypes(o); }
+	if (o->type() == "IfcSlab") { suffix = differentiateSlabTypes(o); }
 	
 	const std::string name = serializer->settings().get(SerializerSettings::USE_ELEMENT_GUIDS) ?
 		o->guid() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_NAMES) ?
-			o->name() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_TYPES) ? o->type() + slabSuffix : o->unique_id()));
+			o->name() : (serializer->settings().get(SerializerSettings::USE_ELEMENT_TYPES) ? o->type() + suffix : o->unique_id()));
 	const std::string representation_id = "representation-" + boost::lexical_cast<std::string>(o->geometry().id());
 	std::vector<std::string> material_references;
 	foreach(const IfcGeom::Material& material, mesh.materials()) {
@@ -444,6 +442,44 @@ std::string ColladaSerializer::ColladaExporter::differentiateSlabTypes(const Ifc
 			if (slab->hasObjectType()) { return "_" + slab->ObjectType(); }
 			else { return "_Unknown"; }
 			break;
+	}
+}
+
+std::string ColladaSerializer::ColladaExporter::differentiateCoveringTypes(const IfcGeom::TriangulationElement<real_t>* o) {
+	IfcCovering* covering = (IfcCovering*)o->product();
+	switch (covering->PredefinedType())
+	{
+	case (IfcCoveringTypeEnum::IfcCoveringType_CEILING):
+		return "_Ceiling";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_CLADDING):
+		return "_Cladding";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_FLOORING):
+		return "_Floor";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_INSULATION):
+		return "_Insulation";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_MEMBRANE):
+		return "_Membrane";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_ROOFING):
+		return "_Roof";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_SLEEVING):
+		return "_Sleeving";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_WRAPPING):
+		return "_Wrapping";
+		break;
+	case (IfcCoveringTypeEnum::IfcCoveringType_NOTDEFINED):
+		return "_NotDefined";
+		break;
+	default:
+		if (covering->hasObjectType()) { return "_" + covering->ObjectType(); }
+		else { return "_Unknown"; }
+		break;
 	}
 }
 
