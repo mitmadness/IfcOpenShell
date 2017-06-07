@@ -58,15 +58,25 @@ namespace IfcGeom {
 	template <typename P>
 	class Transformation {
 	private:
-		gp_Trsf trsf;
-		Matrix<P> _matrix;
+		ElementSettings settings_;
+		gp_Trsf trsf_;
+		Matrix<P> matrix_;
 	public:
 		Transformation(const ElementSettings& settings, const gp_Trsf& trsf)
-			: trsf(trsf)
-			, _matrix(settings, trsf) 
+			: settings_(settings)
+			, trsf_(trsf)
+			, matrix_(settings, trsf) 
 		{}
-		const gp_Trsf& data() const { return trsf; }
-		const Matrix<P>& matrix() const { return _matrix; }
+		const gp_Trsf& data() const { return trsf_; }
+		const Matrix<P>& matrix() const { return matrix_; }
+
+		Transformation inverted() const {
+			return Transformation(settings_, trsf_.Inverted());
+		}
+
+		Transformation multiplied(const Transformation& other) const {
+			return Transformation(settings_, trsf_.Multiplied(other.data()));
+		}
 	};
 
 	template <typename P>
@@ -102,7 +112,7 @@ namespace IfcGeom {
 
 				if (storey1 != NULL && storey2 != NULL && storey1->hasElevation() && storey2->hasElevation())
 				{
-					return storey1->Elevation() < storey2->Elevation();
+					return  (storey1->Elevation() == storey2->Elevation()) ? element1.id() < element2.id() : storey1->Elevation() < storey2->Elevation();
 				}
 			}
 			return element1.id() < element2.id();
@@ -126,18 +136,24 @@ namespace IfcGeom {
             , product_(product)
 		{ 
 			std::ostringstream oss;
-			try { oss << "product-" << IfcParse::IfcGlobalId(guid).formatted(); }
-			catch (std::exception e)
-			{
-				oss << "product-cannotfindId";
+
+			if (type == "IfcProject") {
+				oss << "project";
+			} else {
+				try {
+					oss << "product-" << IfcParse::IfcGlobalId(guid).formatted();
+				} catch (const std::exception&) {
+					oss << "product";
+				}
 			}
 
 			if (!_context.empty()) {
 				std::string ctx = _context;
-				std::transform(ctx.begin(), ctx.end(), ctx.begin(), ::tolower);
-				std::replace(ctx.begin(), ctx.end(), ' ', '-');
+                boost::to_lower(ctx);
+                boost::replace_all(ctx, " ", "-");
 				oss << "-" << ctx;
 			}
+
 			_unique_id = oss.str();
 		}
 		virtual ~Element() {}
