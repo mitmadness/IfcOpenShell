@@ -426,7 +426,7 @@ std::string ColladaSerializer::ColladaExporter::GetSuffix(const IfcGeom::Triangu
 	{
 		IfcWallStandardCase* wall = (IfcWallStandardCase*)o->product();
 		
-		boost::shared_ptr<IfcTemplatedEntityList<Ifc2x3::IfcRelVoidsElement>> op = wall->HasOpenings();
+		boost::shared_ptr<IfcTemplatedEntityList<Ifc2x3::IfcRelVoidsElement> > op = wall->HasOpenings();
 		if (wall->HasOpenings().get()->size() != 0) { return "_Opened"; }
 	}
 	return "";
