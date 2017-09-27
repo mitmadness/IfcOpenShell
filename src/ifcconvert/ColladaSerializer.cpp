@@ -271,6 +271,9 @@ void ColladaSerializer::ColladaExporter::ColladaScene::addParent(const IfcGeom::
 		name = parent.unique_id();
 	}
 
+	// Escape the name to not end up corrupting the Collada file
+	IfcUtil::escape_xml(name);
+
 	const std::string& id = name;
 
 	COLLADASW::Node *current_node;
